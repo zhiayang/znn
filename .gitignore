@@ -1,0 +1,16 @@
+*.exe
+*.o
+*.a
+*.so
+*.dll
+*.cpp.d
+*.c.d
+*.log
+build
+
+*.gch
+*.pch
+*.sublime-workspace
+*.sublime-project
+**/.vscode/ipch
+dump
