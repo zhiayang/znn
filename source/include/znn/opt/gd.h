@@ -90,40 +90,29 @@ namespace znn::optimisers
 
 			while(todo > 0)
 			{
-				// if(this->batchSize > 1)
-				// {
-				// 	// update the batch dimension to be correct
-				// 	x_shape[0] = todo;
-				// 	y_shape[0] = todo;
+				// update the batch dimension to be correct
+				x_shape[0] = todo;
+				y_shape[0] = todo;
 
-				// 	xarr x_batch = xarr::from_shape(x_shape);
-				// 	xarr y_batch = xarr::from_shape(y_shape);
+				xarr x_batch = xarr::from_shape(x_shape);
+				xarr y_batch = xarr::from_shape(y_shape);
 
-				// 	for(size_t i = 0; i < todo; i++)
-				// 	{
-				// 		xt::view(x_batch, i) = inputs[indices[index]];
-				// 		xt::view(y_batch, i) = targets[indices[index]];
-				// 		index++;
-				// 	}
-
-				// 	{
-				// 		model.feed_training(x_batch);
-				// 		auto out_layer = model.outputLayer();
-				// 		auto prediction = out_layer->compute(/* training: */ true, /* batched: */ true);
-
-				// 		assert(y_batch.shape() == prediction.shape());
-
-				// 		xarr error = this->spec.costFn.derivative(y_batch, prediction);
-				// 		out_layer->backward(error, /* batched: */ true);
-				// 	}
-				// }
-				// else
+				for(size_t i = 0; i < todo; i++)
 				{
-					for(size_t i = 0; i < todo; i++)
-					{
-						this->train_one_sample(model, inputs[indices[index]], targets[indices[index]]);
-						index++;
-					}
+					xt::view(x_batch, i) = inputs[indices[index]];
+					xt::view(y_batch, i) = targets[indices[index]];
+					index++;
+				}
+
+				{
+					model.feed_training(x_batch);
+					auto out_layer = model.outputLayer();
+					auto prediction = out_layer->compute(/* training: */ true, /* batched: */ true);
+
+					assert(y_batch.shape() == prediction.shape());
+
+					xarr error = this->spec.costFn.derivative(y_batch, prediction);
+					out_layer->backward(error, /* batched: */ true);
 				}
 
 				this->spec.update_weights(todo, model.outputLayer());

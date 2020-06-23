@@ -65,8 +65,8 @@ int main(int argc, char** argv)
 
 	auto in = layers::Input<shape<2>>();
 	auto a = layers::Dense<10>(in, activations::Sigmoid(), regularisers::L2(0.001));
-	auto b = layers::Dropout(a, 0.2);
-	auto c = layers::Flatten(b);
+	// auto b = layers::Dropout(a, 0.05);
+	auto c = layers::Flatten(a);
 	auto d = layers::Dense<1, activations::Sigmoid>(c);
 	auto model = Model(in, d);
 
@@ -78,7 +78,7 @@ int main(int argc, char** argv)
 
 
 
-	for(size_t i = 0; i < 100; i++)
+	for(size_t i = 0; i < 300; i++)
 	{
 		inputs.push_back({ 0, 0 }); outputs.push_back({ 0 });
 		inputs.push_back({ 0, 1 }); outputs.push_back({ 1 });
@@ -86,10 +86,10 @@ int main(int argc, char** argv)
 		inputs.push_back({ 1, 1 }); outputs.push_back({ 0 });
 	}
 
-	auto opt = optimisers::StochasticGD<cost::MeanSquare>(64, 0.1, 0.9);
+	auto opt = optimisers::Adam<cost::MeanSquare>(8, 0.1, 0.9);
 	for(size_t i = 0; i < 100; i++)
 	{
-		fprintf(stderr, "\r            \repoch %zu", i + 1);
+		fprintf(stderr, "\r            \repoch %zu", i);
 		znn::train(model, inputs, outputs, opt);
 	}
 
@@ -101,6 +101,7 @@ int main(int argc, char** argv)
 	std::cout << "1 ^ 1  =  " << xt::flatten(model.predict({ 1, 1 })) << "\n";
 
 	std::cout << "\n";
+
 
 /*
 6batch size 64:
