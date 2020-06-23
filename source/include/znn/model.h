@@ -16,13 +16,12 @@ namespace znn
 		xarr predict(const xarr& in)
 		{
 			this->input_layer.feed(in);
-			return xt::eval(this->output_layer.compute(/* training: */ false));
+			return xt::eval(this->output_layer.compute(/* training: */ false, /* batched: */ false));
 		}
 
-		xarr train_forward(const xarr& in)
+		void feed_training(const xarr& in)
 		{
 			this->input_layer.feed(in);
-			return xt::eval(this->output_layer.compute(/* training: */ true));
 		}
 
 		Layer* outputLayer()  { return &output_layer; }

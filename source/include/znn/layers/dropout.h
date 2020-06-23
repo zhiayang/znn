@@ -27,24 +27,25 @@ namespace znn::layers
 			static_assert(InputShape::dims > 0, "input shape cannot be 0-dimensional");
 
 
-			virtual xarr compute(bool training) override
+			virtual xarr compute(bool training, bool batched) override
 			{
-				assert(this->prev());
-				auto input = this->prev()->compute(training);
-				assert(zfu::equal(input.shape(), InputShape::sizes));
+				auto input = this->prev()->compute(training, batched);
+				assert(ensure_correct_dimensions<InputShape>(input, batched));
 
 				if(training)
 				{
 					// first generate the mask. we lose nodes with P probability, so we want to generate
 					// a binomial distribution with 1-P chance of success.
-					this->mask = xt::random::binomial(input.shape(), 1, 1.0 - this->probability);
+					// also note: the mask should be strictly the size of the input, unbatched.
+					this->mask = xt::random::binomial(unbatched_input_shape(input, batched),
+						1, 1.0 - this->probability);
 
 					// then we need to scale it by 1/(1-P) to keep the expected sum of the output values
 					// the same regardless of the dropout probability
 					this->mask /= (1.0 - this->probability);
 
 					// then mask the output.
-					this->last_output = xt::eval(this->mask * input);
+					this->last_output = xt::eval(input * this->mask);
 				}
 				else
 				{
@@ -54,20 +55,12 @@ namespace znn::layers
 				return this->last_output;
 			}
 
-			virtual void backward(const xarr& error) override
+			virtual void backward(const xarr& error, bool batched) override
 			{
-				assert(zfu::equal(error.shape(), this->last_output.shape()));
+				assert(ensure_correct_dimensions<OutputShape>(error, batched));
 
-				// auto gradient = error;                  // gradient = 1, since our "activation" is linear.
-				// auto newerror = this->mask * gradient;
-
-				// this->d_weight += util::matrix_mul(xt::transpose(error), this->prev()->getLastOutput());
-				// this->d_bias += error;
-
-				this->update_dw_db(error);
-				this->prev()->backward(this->mask * error);
-
-				// return { gradient, newerror };
+				// since we have no weights, there's no need to update dw or db.
+				this->prev()->backward(error * this->mask, batched);
 			}
 
 			virtual void updateWeights(optimisers::Optimiser* opt, double scale) override

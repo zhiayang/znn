@@ -46,37 +46,33 @@ namespace znn::optimisers
 			xarr d_bias;
 		};
 
-		using LayerDeltaMap = std::unordered_map<Layer*, layer_deltas_t>;
-
-		void train_one_sample(Model& model, LayerDeltaMap& deltas, const xarr& input, const xarr& target)
+		void train_one_sample(Model& model, const xarr& input, const xarr& target)
 		{
-			auto prediction = model.train_forward(input);
+			model.feed_training(input);
 			auto out_layer = model.outputLayer();
+			auto prediction = out_layer->compute(/* training: */ true, /* batched: */ false);
 
 			assert(target.shape() == prediction.shape());
 
-			{
-				xarr error = this->spec.costFn.derivative(target, prediction);
-				out_layer->backward(error);
-
-				// auto cl = out_layer;
-				// while(cl && cl->prev())
-				// {
-				// 	auto [ gradient, new_error ] = cl->backward(error);
-				// 	error = std::move(new_error);
-
-				// 	deltas[cl].d_weight += util::matrix_mul(xt::transpose(gradient), cl->prev()->getLastOutput());
-				// 	deltas[cl].d_bias   += gradient;
-
-				// 	cl = cl->prev();
-				// }
-			}
+			xarr error = this->spec.costFn.derivative(target, prediction);
+			out_layer->backward(error, /* batched: */ false);
 		}
 
 	public:
 		void run(Model& model, const std::vector<xarr>& inputs, const std::vector<xarr>& targets)
 		{
 			assert(inputs.size() == targets.size());
+			if(inputs.empty())
+				return;
+
+			auto batched_shape = [this](auto& shape) -> std::vector<size_t> {
+				auto ret = std::vector<size_t>(shape.begin(), shape.end());
+				ret.insert(ret.begin(), this->batchSize);
+				return ret;
+			};
+
+			auto x_shape = batched_shape(inputs[0].shape());
+			auto y_shape = batched_shape(targets[0].shape());
 
 			size_t count = inputs.size();
 			size_t index = 0;
@@ -94,15 +90,43 @@ namespace znn::optimisers
 
 			while(todo > 0)
 			{
-				LayerDeltaMap deltas;
+				// if(this->batchSize > 1)
+				// {
+				// 	// update the batch dimension to be correct
+				// 	x_shape[0] = todo;
+				// 	y_shape[0] = todo;
 
-				for(size_t i = 0; i < todo; i++)
+				// 	xarr x_batch = xarr::from_shape(x_shape);
+				// 	xarr y_batch = xarr::from_shape(y_shape);
+
+				// 	for(size_t i = 0; i < todo; i++)
+				// 	{
+				// 		xt::view(x_batch, i) = inputs[indices[index]];
+				// 		xt::view(y_batch, i) = targets[indices[index]];
+				// 		index++;
+				// 	}
+
+				// 	{
+				// 		model.feed_training(x_batch);
+				// 		auto out_layer = model.outputLayer();
+				// 		auto prediction = out_layer->compute(/* training: */ true, /* batched: */ true);
+
+				// 		assert(y_batch.shape() == prediction.shape());
+
+				// 		xarr error = this->spec.costFn.derivative(y_batch, prediction);
+				// 		out_layer->backward(error, /* batched: */ true);
+				// 	}
+				// }
+				// else
 				{
-					this->train_one_sample(model, deltas, inputs[indices[index]], targets[indices[index]]);
-					index++;
+					for(size_t i = 0; i < todo; i++)
+					{
+						this->train_one_sample(model, inputs[indices[index]], targets[indices[index]]);
+						index++;
+					}
 				}
 
-				this->spec.update_weights(deltas, todo, model.outputLayer());
+				this->spec.update_weights(todo, model.outputLayer());
 
 				remaining -= todo;
 				todo = std::min(remaining, this->batchSize);
@@ -138,18 +162,10 @@ namespace znn::optimisers
 			(void) db;
 		}
 
-		void update_weights(LayerDeltaMap& deltas, size_t samples, Layer* last)
+		void update_weights(size_t samples, Layer* last)
 		{
-			last->updateWeights(this, 1.0 / ((double) samples / this->learningRate));
+			last->updateWeights(this, this->learningRate / (double) samples);
 			last->resetDeltas();
-
-			// while(cl && cl->prev())
-			// {
-			// 	auto& [ dw, db ] = deltas[cl];
-
-			// 	cl->updateWeights(dw, db, );
-			// 	cl = cl->prev();
-			// }
 		}
 	};
 }

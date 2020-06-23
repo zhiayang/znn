@@ -63,11 +63,11 @@ int main(int argc, char** argv)
 
 	znn::util::setSeed(1);
 
-	auto in = layers::Input<shape<2, 2>>();
+	auto in = layers::Input<shape<2>>();
 	auto a = layers::Dense<10>(in, activations::Sigmoid(), regularisers::L2(0.001));
-	// auto b = layers::Dropout(a, 0.05);
-	auto c = layers::Flatten(a);
-	auto d = layers::Dense<2, activations::Sigmoid>(c);
+	auto b = layers::Dropout(a, 0.2);
+	auto c = layers::Flatten(b);
+	auto d = layers::Dense<1, activations::Sigmoid>(c);
 	auto model = Model(in, d);
 
 	std::vector<xarr> inputs;
@@ -78,35 +78,61 @@ int main(int argc, char** argv)
 
 
 
-	for(size_t i = 0; i < 50; i++)
+	for(size_t i = 0; i < 100; i++)
 	{
-		inputs.push_back({ { 0, 0 }, { 0, 0 } }); outputs.push_back({ 0, 0 });
-		inputs.push_back({ { 0, 1 }, { 0, 1 } }); outputs.push_back({ 0, 1 });
-		inputs.push_back({ { 0, 1 }, { 1, 0 } }); outputs.push_back({ 1, 1 });
-		inputs.push_back({ { 1, 0 }, { 1, 0 } }); outputs.push_back({ 1, 0 });
-		inputs.push_back({ { 1, 0 }, { 0, 1 } }); outputs.push_back({ 1, 1 });
-		inputs.push_back({ { 1, 1 }, { 1, 1 } }); outputs.push_back({ 1, 1 });
+		inputs.push_back({ 0, 0 }); outputs.push_back({ 0 });
+		inputs.push_back({ 0, 1 }); outputs.push_back({ 1 });
+		inputs.push_back({ 1, 0 }); outputs.push_back({ 1 });
+		inputs.push_back({ 1, 1 }); outputs.push_back({ 0 });
 	}
 
-	auto opt = optimisers::Adam<cost::MeanSquare>(8, 0.1, 0.9);
-	for(size_t i = 0; i < 50; i++)
+	auto opt = optimisers::StochasticGD<cost::MeanSquare>(64, 0.1, 0.9);
+	for(size_t i = 0; i < 100; i++)
 	{
-		fprintf(stderr, "\r            \repoch %zu", i);
+		fprintf(stderr, "\r            \repoch %zu", i + 1);
 		znn::train(model, inputs, outputs, opt);
 	}
 
 	fprintf(stderr, "\n");
 
-	std::cout << "0 ^ 0  =  " << xt::flatten(model.predict({ { 0, 0 }, { 0, 0 } })) << "\n";
-	std::cout << "0 ^ 1  =  " << xt::flatten(model.predict({ { 0, 1 }, { 0, 1 } })) << "\n";
-	std::cout << "1 ^ 0  =  " << xt::flatten(model.predict({ { 0, 1 }, { 1, 0 } })) << "\n";
-	std::cout << "1 ^ 1  =  " << xt::flatten(model.predict({ { 1, 0 }, { 1, 0 } })) << "\n";
-	std::cout << "1 ^ 0  =  " << xt::flatten(model.predict({ { 1, 0 }, { 0, 1 } })) << "\n";
-	std::cout << "1 ^ 1  =  " << xt::flatten(model.predict({ { 1, 1 }, { 1, 1 } })) << "\n";
+	std::cout << "0 ^ 0  =  " << xt::flatten(model.predict({ 0, 0 })) << "\n";
+	std::cout << "0 ^ 1  =  " << xt::flatten(model.predict({ 0, 1 })) << "\n";
+	std::cout << "1 ^ 0  =  " << xt::flatten(model.predict({ 1, 0 })) << "\n";
+	std::cout << "1 ^ 1  =  " << xt::flatten(model.predict({ 1, 1 })) << "\n";
 
 	std::cout << "\n";
 
+/*
+6batch size 64:
+0 ^ 0  =  { 0.470141}
+0 ^ 1  =  { 0.519161}
+1 ^ 0  =  { 0.513386}
+1 ^ 1  =  { 0.508132}
 
+3batch size 32:
+0 ^ 0  =  { 0.468871}
+0 ^ 1  =  { 0.508279}
+1 ^ 0  =  { 0.498757}
+1 ^ 1  =  { 0.513801}
+
+1batch size 16:
+0 ^ 0  =  { 0.508404}
+0 ^ 1  =  { 0.565234}
+1 ^ 0  =  { 0.529362}
+1 ^ 1  =  { 0.552676}
+
+batch size 8:
+0 ^ 0  =  { 0.472416}
+0 ^ 1  =  { 0.597913}
+1 ^ 0  =  { 0.554915}
+1 ^ 1  =  { 0.610829}
+
+batch size 1:
+0 ^ 0  =  { 0.00021 }
+0 ^ 1  =  { 0.686758}
+1 ^ 0  =  { 0.534608}
+1 ^ 1  =  { 0.001626}
+*/
 
 
 	printf("hello, world!\n");

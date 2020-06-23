@@ -21,7 +21,6 @@ namespace znn::optimisers
 
 	private:
 		using LayerVelocityMap = std::unordered_map<Layer*, xarr>;
-		using LayerDeltaMap = typename Base::LayerDeltaMap;
 
 		CostFn costFn;
 		const double momentum = 0;
@@ -44,26 +43,10 @@ namespace znn::optimisers
 			}
 		}
 
-		void update_weights(LayerDeltaMap& deltas, size_t samples, Layer* last)
+		void update_weights(size_t samples, Layer* last)
 		{
-			last->updateWeights(this, 1.0 / ((double) samples / this->learningRate));
+			last->updateWeights(this, this->learningRate / (double) samples);
 			last->resetDeltas();
-
-			// while(cl && cl->prev())
-			// {
-			// 	auto& [ dw, db ] = deltas[cl];
-
-			// 	if(this->momentum > 0)
-			// 	{
-			// 		xarr& vel = this->velocities[cl];
-			// 		vel = (this->momentum * vel) + dw;
-
-			// 		dw = vel;
-			// 	}
-
-			// 	cl->updateWeights(dw, db, 1.0 / ((double) samples / this->learningRate));
-			// 	cl = cl->prev();
-			// }
 		}
 	};
 }

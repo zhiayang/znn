@@ -25,32 +25,41 @@ namespace znn::layers
 
 			static_assert(InputShape::dims > 0, "input shape cannot be 0-dimensional");
 
-			virtual xarr compute(bool training) override
+			virtual xarr compute(bool training, bool batched) override
 			{
-				assert(this->prev());
-				auto input = this->prev()->compute(training);
-				assert(zfu::equal(input.shape(), InputShape::sizes));
+				auto input = this->prev()->compute(training, batched);
+				assert(ensure_correct_dimensions<InputShape>(input, batched));
 
-				this->last_output = xt::flatten(input);
+				this->last_output = (batched
+					? xarr(xt::reshape_view(input, { input.shape()[0], OutputShape::sizes[0] }))
+					: xarr(xt::flatten(input))
+				);
+
 				return this->last_output;
 			}
 
-			virtual void backward(const xarr& error) override
+			virtual void backward(const xarr& error, bool batched) override
 			{
-				assert(zfu::equal(error.shape(), this->last_output.shape()));
+				assert(ensure_correct_dimensions<OutputShape>(error, batched));
 
-				xarr gradient = error;
-				gradient.reshape(InputShape::sizes);
+				xarr newerror;
+				if(batched)
+				{
+					std::vector<size_t> shape;
+					shape.reserve(error.shape().size() + 1);
+					shape.push_back(error.shape()[0]);
+					shape.insert(shape.end(), InputShape::sizes.begin(), InputShape::sizes.end());
 
-				xarr newerror = gradient;
+					newerror = xt::reshape_view(error, shape);
+				}
+				else
+				{
+					newerror = xt::reshape_view(error, InputShape::sizes);
+				}
+
 
 				// there's no need to call update_dw_db here, since we have no weights nor biases
-				this->prev()->backward(newerror);
-
-				// this->d_weight += util::matrix_mul(xt::transpose(gradient), this->prev()->getLastOutput());
-				// this->d_bias += gradient;
-
-				// return { gradient, newerror };
+				this->prev()->backward(newerror, batched);
 			}
 
 			virtual void updateWeights(optimisers::Optimiser* opt, double scale) override

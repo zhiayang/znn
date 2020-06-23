@@ -26,21 +26,27 @@ namespace znn::layers
 
 			virtual void feed(const xarr& input) override
 			{
-				assert(zfu::equal(input.shape(), InputShape::sizes));
 				this->last_output = input;
 			}
 
-			virtual xarr compute(bool) override
+			virtual xarr compute(bool training, bool batched) override
 			{
+				(void) training;
+				assert(ensure_correct_dimensions<InputShape>(this->last_output, batched));
+
 				return this->last_output;
 			}
 
-			virtual void backward(const xarr&) override
+			virtual void backward(const xarr& err, bool batched) override
 			{
+				(void) err;
+				(void) batched;
 			}
 
-			virtual void updateWeights(optimisers::Optimiser*, double) override
+			virtual void updateWeights(optimisers::Optimiser* opt, double scale) override
 			{
+				(void) opt;
+				(void) scale;
 			}
 
 		private:

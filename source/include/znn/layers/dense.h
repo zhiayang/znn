@@ -31,31 +31,39 @@ namespace znn::layers
 			using OutputShape = typename InputShape::template drop<1>::template add<N>;
 			static_assert(InputShape::dims > 0, "input shape cannot be 0-dimensional");
 
-			virtual xarr compute(bool training) override
+			virtual xarr compute(bool training, bool batched) override
 			{
-				assert(this->prev());
-				auto input = this->prev()->compute(training);
-
-				assert(zfu::equal(input.shape(), InputShape::sizes));
+				auto input = this->prev()->compute(training, batched);
+				assert(ensure_correct_dimensions<InputShape>(input, batched));
 
 				xarr output = util::matrix_mul(input, this->transposedWeights) + this->biases;
-				assert(zfu::equal(output.shape(), OutputShape::sizes));
+				assert(ensure_correct_dimensions<OutputShape>(output, batched));
 
 				this->last_output = xt::eval(this->activator.forward(output));
 				return this->last_output;
 			}
 
-			virtual void backward(const xarr& error) override
+			virtual void backward(const xarr& error, bool batched) override
 			{
-				assert(zfu::equal(error.shape(), this->last_output.shape()));
+				assert(ensure_correct_dimensions<OutputShape>(error, batched));
 
 				auto gradient = error * this->activator.derivative(this->last_output);
 				auto newerror = util::matrix_mul(gradient, this->weights);
 
-				this->update_dw_db(gradient);
-				this->prev()->backward(newerror);
+				if(batched)
+				{
+					// need to squash along the batch dimension
+					this->update_dw_db(
+						xt::sum(gradient, 0),
+						xt::sum(this->prev()->getLastOutput(), 0)
+					);
+				}
+				else
+				{
+					this->update_dw_db(gradient, this->prev()->getLastOutput());
+				}
 
-				// return { gradient, newerror };
+				this->prev()->backward(newerror, batched);
 			}
 
 			virtual void updateWeights(optimisers::Optimiser* opt, double scale) override

@@ -23,7 +23,6 @@ namespace znn::optimisers
 
 	private:
 		using LayerGradMap = std::unordered_map<Layer*, xarr>;
-		using LayerDeltaMap = typename Base::LayerDeltaMap;
 
 		CostFn costFn;
 		const double beta1 = 0;
@@ -41,6 +40,9 @@ namespace znn::optimisers
 
 		void setup()
 		{
+			// i have no idea if we're supposed to reset this every epoch or not...
+			// it's worse if we reset it, so let's just not reset it for now
+			// this->timestep = 0;
 		}
 
 		virtual void computeDeltas(Layer* layer, xarr& dw, xarr& db) override
@@ -57,28 +59,11 @@ namespace znn::optimisers
 			(void) db;
 		}
 
-		void update_weights(LayerDeltaMap& deltas, size_t samples, Layer* last)
+		void update_weights(size_t samples, Layer* last)
 		{
 			timestep += 1.0;
-			last->updateWeights(this, 1.0 / ((double) samples / this->learningRate));
+			last->updateWeights(this, this->learningRate / (double) samples);
 			last->resetDeltas();
-
-			// while(last && cl->prev())
-			// {
-			// 	auto& [ dw, db ] = deltas[cl];
-			// 	auto& [ g1, g2 ] = params[cl];
-
-			// 	g1 = (this->beta1 * g1) + ((1.0 - this->beta1) * dw);
-			// 	g2 = (this->beta2 * g2) + ((1.0 - this->beta2) * xt::square(dw));
-
-			// 	xarr mk = g1 / (1.0 - std::pow(beta1, timestep));
-			// 	xarr rk = g2 / (1.0 - std::pow(beta2, timestep));
-
-			// 	dw = mk / (xt::sqrt(rk) + this->epsilon);
-
-			// 	cl->updateWeights(dw, db, 1.0 / ((double) samples / this->learningRate));
-			// 	cl = cl->prev();
-			// }
 		}
 	};
 }

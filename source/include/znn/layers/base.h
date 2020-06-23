@@ -22,21 +22,21 @@ namespace znn
 	{
 		virtual ~Layer() { }
 
-		virtual xarr compute(bool training) = 0;
-		virtual void backward(const xarr& err) = 0;
+		virtual xarr compute(bool training, bool batched) = 0;
+		virtual void backward(const xarr& err, bool batched) = 0;
 		virtual void updateWeights(optimisers::Optimiser* opt, double scale) = 0;
 
 		const xarr& getLastOutput() { return this->last_output; }
 
-		Layer* prev() { return input_layer; }
+		Layer* prev() { assert(input_layer); return input_layer; }
 
 		void resetDeltas()
 		{
 			this->d_weight = xt::zeros<double>(this->d_weight.shape());
 			this->d_bias = xt::zeros<double>(this->d_bias.shape());
 
-			if(this->prev())
-				this->prev()->resetDeltas();
+			if(this->input_layer != nullptr)
+				this->input_layer->resetDeltas();
 		}
 
 	protected:
@@ -45,9 +45,32 @@ namespace znn
 		xarr d_weight = { };
 		xarr d_bias = { };
 
-		void update_dw_db(const xarr& gradient)
+		template <typename InputShape>
+		bool ensure_correct_dimensions(const xarr& input, bool batched)
 		{
-			this->d_weight += util::matrix_mul(xt::transpose(gradient), this->prev()->getLastOutput());
+			if(batched)
+			{
+				return (input.dimension() == InputShape::dims + 1)
+					&& (std::equal(input.shape().begin() + 1, input.shape().end(),
+									InputShape::sizes.begin(), InputShape::sizes.end()));
+			}
+			else
+			{
+				return zfu::equal(input.shape(), InputShape::sizes);
+			}
+		}
+
+		auto unbatched_input_shape(const xarr& input, bool batched)
+		{
+			auto shape = input.shape();
+			using shape_t = decltype(shape);
+
+			return shape_t(shape.begin() + (batched ? 1 : 0), shape.end());
+		}
+
+		void update_dw_db(const xarr& gradient, const xarr& inputs)
+		{
+			this->d_weight += util::matrix_mul(xt::transpose(gradient), inputs);
 			this->d_bias += gradient;
 		}
 

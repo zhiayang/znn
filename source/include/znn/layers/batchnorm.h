@@ -30,19 +30,17 @@ namespace znn::layers
 
 
 
-			virtual xarr compute(bool training) override
+			virtual xarr compute(bool training, bool batched) override
 			{
-				assert(this->prev());
-				auto input = this->prev()->compute(training);
-				assert(zfu::equal(input.shape(), InputShape::sizes));
-
+				auto input = this->prev()->compute(training, batched);
+				assert(ensure_correct_dimensions<InputShape>(input, batched));
 
 				return this->last_output;
 			}
 
-			virtual void backward(const xarr& error) override
+			virtual void backward(const xarr& error, bool batched) override
 			{
-				assert(zfu::equal(error.shape(), this->last_output.shape()));
+				assert(ensure_correct_dimensions<OutputShape>(error, batched));
 			}
 
 			virtual void updateWeights(optimisers::Optimiser* opt, double scale) override

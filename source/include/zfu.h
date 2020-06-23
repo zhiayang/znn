@@ -41,6 +41,19 @@ std::vector<T> operator + (const std::vector<T>& a, const std::vector<T>& b)
 }
 
 
+template <typename T, size_t N>
+std::array<T, N + 1> operator + (const T& elm, const std::array<T, N>& vec)
+{
+	std::array<T, N + 1> copy;
+	copy[0] = elm;
+
+	for(size_t i = 0; i < N; i++)
+		copy[i + 1] = vec[i];
+
+	return copy;
+}
+
+
 template <typename T>
 std::vector<T>& operator += (std::vector<T>& vec, const T& elm)
 {
