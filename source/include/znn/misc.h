@@ -14,28 +14,56 @@ namespace znn
 	{
 		virtual ~Layer() { }
 
-		virtual xarr forward(const xarr& in) = 0;
-		virtual std::pair<xarr, xarr> backward(const xarr& last, const xarr& del) = 0;
-		virtual void update_weights(const xarr& w, const xarr& del) = 0;
+		virtual xarr compute(bool training) = 0;
+		virtual std::pair<xarr, xarr> backward(const xarr& del) = 0;
+		virtual void updateWeights(const xarr& dw, const xarr& db, double scale) = 0;
 
-		Layer* input_layer = 0;
-		Layer* output_layer = 0;
+		const xarr& getLastOutput() { return this->last_output; }
+
+		Layer* prev() { return input_layer; }
 
 	protected:
 		Layer(Layer* in) : input_layer(in) { }
+		xarr last_output = { };
+
+	private:
+		Layer* input_layer = 0;
 	};
-
-
-
-
-
-
-
-
-
 
 	namespace util
 	{
+		struct __random_state_t
+		{
+			bool is_fixed = false;
+			uint32_t fixed_seed = 0;
+			std::random_device rd;
+		};
+
+		// note: static-duration variables in external-linkage functions will be collapsed
+		// to refer to the same storage.
+		inline __random_state_t& __get_global_random_state()
+		{
+			static __random_state_t state;
+			return state;
+		}
+
+		static inline uint32_t getSeed()
+		{
+			auto& st = __get_global_random_state();
+			if(st.is_fixed) return st.fixed_seed;
+			else            return st.rd();
+		}
+
+		static inline void setSeed(uint32_t value)
+		{
+			auto& st = __get_global_random_state();
+			st.fixed_seed = value;
+			st.is_fixed = true;
+
+			// also set the seed for xt
+			xt::random::seed(value);
+		}
+
 		// perform matrix multiplication, or dot product.
 		xarr dot(const xarr& a, const xarr& b)
 		{
@@ -79,16 +107,16 @@ namespace znn
 				// of course assume a is a column vector and b is a row vector.
 				// we need to replicate a horizontally, n times
 
+				// std::cout << "a: " << xt::adapt(a.shape()) << ",  b: " << xt::adapt(b.shape()) << "\n";
+
 				auto&& u = xt::eval(xt::repeat(xt::atleast_2d(a), bn, 0));
 				auto&& v = xt::eval(xt::repeat(xt::atleast_2d(b), an, 0));
 
-				// std::cout << "a: " << xt::adapt(a.shape()) << ",  b: " << xt::adapt(b.shape()) << "\n";
 				// std::cout << "u: " << xt::adapt(u.shape()) << ",  v: " << xt::adapt(v.shape()) << "\n";
 
 				auto&& ut = xt::transpose(u);
 				auto&& ret = ut * v;
 
-				// std::cout << "a: " << xt::adapt(a.shape()) << ",  b: " << xt::adapt(b.shape()) << ",  ret = " << ret << "\n";
 				return xt::eval(ret);
 			}
 		}
@@ -116,51 +144,4 @@ namespace znn
 		template <size_t D = dims, typename E = std::enable_if_t<(D > 0)>>
 		static constexpr size_t last = sizes[D - 1];
 	};
-
-	template <typename T1, typename T2, typename NT1, typename NT2, NT1 N1, NT2 N2>
-	bool operator== (const xt::const_array<T1, N1>& a, const xt::svector<T2, N2>& b)
-	{
-		return std::equal(a.begin(), a.end(), b.begin(), b.end());
-	}
-
-	template <typename T1, typename T2, typename NT1, typename NT2, NT1 N1, NT2... N2>
-	bool operator== (const xt::sequence_view<T2, N2...>& a, const xt::const_array<T1, N1>& b)
-	{
-		return std::equal(a.begin(), a.end(), b.begin(), b.end());
-	}
-
-	template <typename T1, typename T2, typename NT1, typename NT2, NT1 N1, NT2... N2>
-	bool operator== (const xt::sequence_view<T2, N2...>& a, const xt::svector<T1, N1>& b)
-	{
-		return std::equal(a.begin(), a.end(), b.begin(), b.end());
-	}
-
-
-
-
-	template <typename T1, size_t N1, typename T2, size_t N2>
-	bool operator== (const xt::svector<T2, N2>& a, const xt::const_array<T1, N1>& b)
-	{
-		return (b == a);
-	}
-
-	template <typename T1, typename T2, size_t N1, size_t... N2>
-	bool operator== (const xt::svector<T1, N1>& a, const xt::sequence_view<T2, N2...>& b)
-	{
-		return (b == a);
-	}
-
-	template <typename T1, typename T2, size_t N1, size_t... N2>
-	bool operator== (const xt::const_array<T1, N1>& a, const xt::sequence_view<T2, N2...>& b)
-	{
-		return (b == a);
-	}
-
-
-
-	template <typename T1, size_t N1, typename T2, size_t N2>
-	bool operator!= (const xt::const_array<T1, N1>& a, const xt::svector<T2, N2>& b) { return !(a == b); }
-
-	template <typename T1, size_t N1, typename T2, size_t N2>
-	bool operator!= (const xt::svector<T2, N2>& a, const xt::const_array<T1, N1>& b) { return !(b == a); }
 }

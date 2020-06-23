@@ -82,6 +82,14 @@ namespace zfu
 		return (x + ... + xs);
 	}
 
+	template <typename T1, typename T2>
+	bool equal(const T1& a, const T2& b)
+	{
+		using std::begin;
+		using std::end;
+
+		return std::equal(begin(a), end(a), begin(b), end(b));
+	}
 
 
 	template <typename T>
