@@ -4,7 +4,8 @@
 
 #pragma once
 
-#include "../misc.h"
+#include "base.h"
+
 #include "../activations.h"
 #include "../regularisers.h"
 
@@ -23,6 +24,7 @@ namespace znn::layers
 			{
 				// fill with normally-distributed junk
 				this->weights = xt::random::randn<double>(this->weights.shape(), 0, 1);
+				this->transposedWeights = xt::transpose(this->weights);
 			}
 
 			using InputShape = typename InputLayer::OutputShape;
@@ -36,38 +38,43 @@ namespace znn::layers
 
 				assert(zfu::equal(input.shape(), InputShape::sizes));
 
-				auto output = xarr::from_shape(OutputShape::sizes);
-				for(size_t i = 0; i < N; i++)
-				{
-					auto ov = xt::view(output, xt::all(), i);
-					auto wv = xt::view(weights, i, xt::all());
-
-					assert(zfu::equal(wv.shape(), input.shape()));
-					ov = xt::eval(biases(i) + xt::sum(wv * input));
-				}
+				xarr output = util::matrix_mul(input, this->transposedWeights) + this->biases;
+				assert(zfu::equal(output.shape(), OutputShape::sizes));
 
 				this->last_output = xt::eval(this->activator.forward(output));
 				return this->last_output;
 			}
 
-			virtual std::pair<xarr, xarr> backward(const xarr& delta) override
+			virtual void backward(const xarr& error) override
 			{
-				assert(zfu::equal(delta.shape(), this->last_output.shape()));
+				assert(zfu::equal(error.shape(), this->last_output.shape()));
 
-				auto gradient = delta * this->activator.derivative(this->last_output);
-				auto newdelta = util::dot(xt::transpose(this->weights), gradient);
+				auto gradient = error * this->activator.derivative(this->last_output);
+				auto newerror = util::matrix_mul(gradient, this->weights);
 
-				return { gradient, newdelta };
+				this->update_dw_db(gradient);
+				this->prev()->backward(newerror);
+
+				// return { gradient, newerror };
 			}
 
-			virtual void updateWeights(const xarr& dw, const xarr& db, double scale) override
+			virtual void updateWeights(optimisers::Optimiser* opt, double scale) override
 			{
-				assert(zfu::equal(dw.shape(), weights.shape()));
+				assert(zfu::equal(this->d_weight.shape(), weights.shape()));
+				opt->computeDeltas(this, this->d_weight, this->d_bias);
 
 				// also regularise the weight, which applies a penalty for large weights
 				// to combat overfitting.
-				this->weights -= scale * (dw + this->regulariser.derivative(this->weights));
-				this->biases -= scale * db;
+				this->weights -= scale * (this->d_weight + this->regulariser.derivative(this->weights));
+
+				// note that we need to collapse the incoming db; each bias contributes
+				// to multiple nodes' errors downstream, so we just do the simple thing and
+				// sum them up.
+				this->biases -= scale * xt::sum(this->d_bias, 0);
+
+				this->transposedWeights = xt::transpose(this->weights);
+
+				this->prev()->updateWeights(opt, scale);
 			}
 
 		private:
@@ -75,6 +82,7 @@ namespace znn::layers
 			RegulariserFn regulariser;
 			xt::xtensor_fixed<double, xt::xshape<N>> biases;
 			xt::xtensor_fixed<double, xt::xshape<N, InputShape::template last<>>> weights;
+			xt::xtensor_fixed<double, xt::xshape<InputShape::template last<>, N>> transposedWeights;
 		};
 	}
 

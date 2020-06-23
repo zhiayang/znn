@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "../misc.h"
+#include "../util.h"
 #include "../activations.h"
 #include "../regularisers.h"
 
@@ -40,14 +40,12 @@ namespace znn::layers
 				return this->last_output;
 			}
 
-			virtual std::pair<xarr, xarr> backward(const xarr& delta) override
+			virtual void backward(const xarr& error) override
 			{
-				assert(zfu::equal(delta.shape(), this->last_output.shape()));
-
-				return { };
+				assert(zfu::equal(error.shape(), this->last_output.shape()));
 			}
 
-			virtual void updateWeights(const xarr& dw, const xarr& db, double scale) override
+			virtual void updateWeights(optimisers::Optimiser* opt, double scale) override
 			{
 			}
 

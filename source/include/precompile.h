@@ -36,14 +36,17 @@
 #include "zpr.h"
 #include "zfu.h"
 
-#include <xtensor/xio.hpp>
-#include <xtensor/xview.hpp>
-#include <xtensor/xadapt.hpp>
-#include <xtensor/xfixed.hpp>
-#include <xtensor/xarray.hpp>
-#include <xtensor/xrandom.hpp>
-#include <xtensor/xtensor.hpp>
-#include <xtensor/xmanipulation.hpp>
+#include "xtensor/xio.hpp"
+#include "xtensor/xview.hpp"
+#include "xtensor/xadapt.hpp"
+#include "xtensor/xfixed.hpp"
+#include "xtensor/xarray.hpp"
+#include "xtensor/xrandom.hpp"
+#include "xtensor/xtensor.hpp"
+#include "xtensor/xstrided_view.hpp"
+#include "xtensor/xmanipulation.hpp"
+
+#include "xtensor-blas/xlinalg.hpp"
 
 #endif
 

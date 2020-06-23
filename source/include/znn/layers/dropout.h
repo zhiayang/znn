@@ -4,7 +4,8 @@
 
 #pragma once
 
-#include "../misc.h"
+#include "base.h"
+
 #include "../activations.h"
 #include "../regularisers.h"
 
@@ -53,21 +54,26 @@ namespace znn::layers
 				return this->last_output;
 			}
 
-			virtual std::pair<xarr, xarr> backward(const xarr& delta) override
+			virtual void backward(const xarr& error) override
 			{
-				assert(zfu::equal(delta.shape(), this->last_output.shape()));
+				assert(zfu::equal(error.shape(), this->last_output.shape()));
 
-				auto gradient = delta;                  // gradient = 1, since our "activation" is linear.
-				auto newdelta = this->mask * gradient;
+				// auto gradient = error;                  // gradient = 1, since our "activation" is linear.
+				// auto newerror = this->mask * gradient;
 
-				return { gradient, newdelta };
+				// this->d_weight += util::matrix_mul(xt::transpose(error), this->prev()->getLastOutput());
+				// this->d_bias += error;
+
+				this->update_dw_db(error);
+				this->prev()->backward(this->mask * error);
+
+				// return { gradient, newerror };
 			}
 
-			virtual void updateWeights(const xarr& dw, const xarr& db, double scale) override
+			virtual void updateWeights(optimisers::Optimiser* opt, double scale) override
 			{
 				// there's nothing to do
-				(void) dw;
-				(void) db;
+				(void) opt;
 				(void) scale;
 			}
 

@@ -9,7 +9,7 @@
 namespace znn::optimisers
 {
 	template <typename CostFn>
-	struct StochasticGD : GDDriver<CostFn, StochasticGD<CostFn>>
+	struct StochasticGD : GDDriver<CostFn, StochasticGD<CostFn>>, Optimiser
 	{
 		using Base = GDDriver<CostFn, StochasticGD<CostFn>>;
 		friend Base;
@@ -31,23 +31,39 @@ namespace znn::optimisers
 		{
 		}
 
-		void update_weights(LayerDeltaMap& deltas, size_t samples, Layer* cl)
+
+		virtual void computeDeltas(Layer* layer, xarr& dw, xarr& db) override
 		{
-			while(cl && cl->prev())
+			if(this->momentum > 0)
 			{
-				auto& [ dw, db ] = deltas[cl];
+				xarr& vel = this->velocities[layer];
+				vel = (this->momentum * vel) + dw;
 
-				if(this->momentum > 0)
-				{
-					xarr& vel = this->velocities[cl];
-					vel = (this->momentum * vel) + dw;
-
-					dw = vel;
-				}
-
-				cl->updateWeights(dw, db, 1.0 / ((double) samples / this->learningRate));
-				cl = cl->prev();
+				dw = vel;
+				(void) db;
 			}
+		}
+
+		void update_weights(LayerDeltaMap& deltas, size_t samples, Layer* last)
+		{
+			last->updateWeights(this, 1.0 / ((double) samples / this->learningRate));
+			last->resetDeltas();
+
+			// while(cl && cl->prev())
+			// {
+			// 	auto& [ dw, db ] = deltas[cl];
+
+			// 	if(this->momentum > 0)
+			// 	{
+			// 		xarr& vel = this->velocities[cl];
+			// 		vel = (this->momentum * vel) + dw;
+
+			// 		dw = vel;
+			// 	}
+
+			// 	cl->updateWeights(dw, db, 1.0 / ((double) samples / this->learningRate));
+			// 	cl = cl->prev();
+			// }
 		}
 	};
 }

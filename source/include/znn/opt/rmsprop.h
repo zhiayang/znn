@@ -9,7 +9,7 @@
 namespace znn::optimisers
 {
 	template <typename CostFn>
-	struct RMSProp : GDDriver<CostFn, RMSProp<CostFn>>
+	struct RMSProp : GDDriver<CostFn, RMSProp<CostFn>>, Optimiser
 	{
 		using Base = GDDriver<CostFn, RMSProp<CostFn>>;
 		friend Base;
@@ -32,22 +32,34 @@ namespace znn::optimisers
 		{
 		}
 
-		void update_weights(LayerDeltaMap& deltas, size_t samples, Layer* cl)
+		virtual void computeDeltas(Layer* layer, xarr& dw, xarr& db) override
 		{
-			while(cl && cl->prev())
-			{
-				auto& [ dw, db ] = deltas[cl];
+			xarr& hist = this->history[layer];
+			hist = (this->decay * hist) + ((1 - this->decay) * xt::square(dw));
 
-				{
-					xarr& hist = this->history[cl];
-					hist = (this->decay * hist) + ((1 - this->decay) * xt::square(dw));
+			dw /= (xt::sqrt(hist) + this->epsilon);
+			(void) db;
+		}
 
-					dw /= (xt::sqrt(hist) + this->epsilon);
-				}
+		void update_weights(LayerDeltaMap& deltas, size_t samples, Layer* last)
+		{
+			last->updateWeights(this, 1.0 / ((double) samples / this->learningRate));
+			last->resetDeltas();
 
-				cl->updateWeights(dw, db, 1.0 / ((double) samples / this->learningRate));
-				cl = cl->prev();
-			}
+			// while(cl && cl->prev())
+			// {
+			// 	auto& [ dw, db ] = deltas[cl];
+
+			// 	{
+			// 		xarr& hist = this->history[cl];
+			// 		hist = (this->decay * hist) + ((1 - this->decay) * xt::square(dw));
+
+			// 		dw /= (xt::sqrt(hist) + this->epsilon);
+			// 	}
+
+			// 	cl->updateWeights(dw, db, 1.0 / ((double) samples / this->learningRate));
+			// 	cl = cl->prev();
+			// }
 		}
 	};
 }

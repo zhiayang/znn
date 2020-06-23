@@ -9,7 +9,7 @@
 namespace znn::optimisers
 {
 	template <typename CostFn>
-	struct Adam : GDDriver<CostFn, Adam<CostFn>>
+	struct Adam : GDDriver<CostFn, Adam<CostFn>>, Optimiser
 	{
 		using Base = GDDriver<CostFn, Adam<CostFn>>;
 		friend Base;
@@ -43,26 +43,42 @@ namespace znn::optimisers
 		{
 		}
 
-		void update_weights(LayerDeltaMap& deltas, size_t samples, Layer* cl)
+		virtual void computeDeltas(Layer* layer, xarr& dw, xarr& db) override
+		{
+			auto& [ g1, g2 ] = this->params[layer];
+
+			g1 = (this->beta1 * g1) + ((1.0 - this->beta1) * dw);
+			g2 = (this->beta2 * g2) + ((1.0 - this->beta2) * xt::square(dw));
+
+			xarr mk = g1 / (1.0 - std::pow(beta1, timestep));
+			xarr rk = g2 / (1.0 - std::pow(beta2, timestep));
+
+			dw = mk / (xt::sqrt(rk) + this->epsilon);
+			(void) db;
+		}
+
+		void update_weights(LayerDeltaMap& deltas, size_t samples, Layer* last)
 		{
 			timestep += 1.0;
+			last->updateWeights(this, 1.0 / ((double) samples / this->learningRate));
+			last->resetDeltas();
 
-			while(cl && cl->prev())
-			{
-				auto& [ dw, db ] = deltas[cl];
-				auto& [ g1, g2 ] = params[cl];
+			// while(last && cl->prev())
+			// {
+			// 	auto& [ dw, db ] = deltas[cl];
+			// 	auto& [ g1, g2 ] = params[cl];
 
-				g1 = (this->beta1 * g1) + ((1.0 - this->beta1) * dw);
-				g2 = (this->beta2 * g2) + ((1.0 - this->beta2) * xt::square(dw));
+			// 	g1 = (this->beta1 * g1) + ((1.0 - this->beta1) * dw);
+			// 	g2 = (this->beta2 * g2) + ((1.0 - this->beta2) * xt::square(dw));
 
-				xarr mk = g1 / (1.0 - std::pow(beta1, timestep));
-				xarr rk = g2 / (1.0 - std::pow(beta2, timestep));
+			// 	xarr mk = g1 / (1.0 - std::pow(beta1, timestep));
+			// 	xarr rk = g2 / (1.0 - std::pow(beta2, timestep));
 
-				dw = mk / (xt::sqrt(rk) + this->epsilon);
+			// 	dw = mk / (xt::sqrt(rk) + this->epsilon);
 
-				cl->updateWeights(dw, db, 1.0 / ((double) samples / this->learningRate));
-				cl = cl->prev();
-			}
+			// 	cl->updateWeights(dw, db, 1.0 / ((double) samples / this->learningRate));
+			// 	cl = cl->prev();
+			// }
 		}
 	};
 }

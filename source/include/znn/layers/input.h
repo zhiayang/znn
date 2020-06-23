@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "../misc.h"
+#include "base.h"
 
 namespace znn::layers
 {
@@ -24,12 +24,6 @@ namespace znn::layers
 			using OutputShape = InputShape;
 
 
-			virtual std::pair<xarr, xarr> backward(const xarr&) override
-			{
-				// do nothing, we have no weights.
-				return { };
-			}
-
 			virtual void feed(const xarr& input) override
 			{
 				assert(zfu::equal(input.shape(), InputShape::sizes));
@@ -41,7 +35,11 @@ namespace znn::layers
 				return this->last_output;
 			}
 
-			virtual void updateWeights(const xarr&, const xarr&, double) override
+			virtual void backward(const xarr&) override
+			{
+			}
+
+			virtual void updateWeights(optimisers::Optimiser*, double) override
 			{
 			}
 

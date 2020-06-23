@@ -26,13 +26,6 @@
 		calculated the same way independent of the optimiser.
 
 
-		also, worthwhile effort to do the backprop and the calc of dw and db in
-		the same pass, so (a) we don't need to store gradients in a temporary, and
-		(b) we can see how to structure the code to put it into the layer's backward
-		pass. ofc we'll need a mechanism to generalise it the layers don't end up
-		having copies of the same code.
-
-
 	2. training needs to be done across all samples in a batch, layer by layer.
 
 		currently, training is done in batches, but we do a full forward+backward
@@ -62,16 +55,7 @@
 */
 
 
-
-
-
-
-
-
-
-
-
-
+#if 1
 
 int main(int argc, char** argv)
 {
@@ -79,11 +63,12 @@ int main(int argc, char** argv)
 
 	znn::util::setSeed(1);
 
-	auto in = layers::Input<shape<2>>();
+	auto in = layers::Input<shape<2, 2>>();
 	auto a = layers::Dense<10>(in, activations::Sigmoid(), regularisers::L2(0.001));
-	auto b = layers::Dropout(a, 0.05);
-	auto c = layers::Dense<1, activations::Sigmoid>(b);
-	auto model = Model(in, c);
+	// auto b = layers::Dropout(a, 0.05);
+	auto c = layers::Flatten(a);
+	auto d = layers::Dense<2, activations::Sigmoid>(c);
+	auto model = Model(in, d);
 
 	std::vector<xarr> inputs;
 	std::vector<xarr> outputs;
@@ -91,12 +76,16 @@ int main(int argc, char** argv)
 	inputs.reserve(4 * 500);
 	outputs.reserve(4 * 500);
 
+
+
 	for(size_t i = 0; i < 50; i++)
 	{
-		inputs.push_back({ 0, 0 }); outputs.push_back({ 0 });
-		inputs.push_back({ 0, 1 }); outputs.push_back({ 1 });
-		inputs.push_back({ 1, 0 }); outputs.push_back({ 1 });
-		inputs.push_back({ 1, 1 }); outputs.push_back({ 0 });
+		inputs.push_back({ { 0, 0 }, { 0, 0 } }); outputs.push_back({ 0, 0 });
+		inputs.push_back({ { 0, 1 }, { 0, 1 } }); outputs.push_back({ 0, 1 });
+		inputs.push_back({ { 0, 1 }, { 1, 0 } }); outputs.push_back({ 1, 1 });
+		inputs.push_back({ { 1, 0 }, { 1, 0 } }); outputs.push_back({ 1, 0 });
+		inputs.push_back({ { 1, 0 }, { 0, 1 } }); outputs.push_back({ 1, 1 });
+		inputs.push_back({ { 1, 1 }, { 1, 1 } }); outputs.push_back({ 1, 1 });
 	}
 
 	auto opt = optimisers::Adam<cost::MeanSquare>(8, 0.1, 0.9);
@@ -108,10 +97,12 @@ int main(int argc, char** argv)
 
 	fprintf(stderr, "\n");
 
-	std::cout << "0 ^ 0  =  " << model.predict({ 0, 0 }) << "\n";
-	std::cout << "0 ^ 1  =  " << model.predict({ 0, 1 }) << "\n";
-	std::cout << "1 ^ 0  =  " << model.predict({ 1, 0 }) << "\n";
-	std::cout << "1 ^ 1  =  " << model.predict({ 1, 1 }) << "\n";
+	std::cout << "0 ^ 0  =  " << xt::flatten(model.predict({ { 0, 0 }, { 0, 0 } })) << "\n";
+	std::cout << "0 ^ 1  =  " << xt::flatten(model.predict({ { 0, 1 }, { 0, 1 } })) << "\n";
+	std::cout << "1 ^ 0  =  " << xt::flatten(model.predict({ { 0, 1 }, { 1, 0 } })) << "\n";
+	std::cout << "1 ^ 1  =  " << xt::flatten(model.predict({ { 1, 0 }, { 1, 0 } })) << "\n";
+	std::cout << "1 ^ 0  =  " << xt::flatten(model.predict({ { 1, 0 }, { 0, 1 } })) << "\n";
+	std::cout << "1 ^ 1  =  " << xt::flatten(model.predict({ { 1, 1 }, { 1, 1 } })) << "\n";
 
 	std::cout << "\n";
 
@@ -120,3 +111,17 @@ int main(int argc, char** argv)
 
 	printf("hello, world!\n");
 }
+#else
+
+int main()
+{
+	using namespace znn;
+
+	xarr foo = xt::arange(36).reshape({ 3, 3, 4 });
+	xarr bar = xt::arange(24).reshape({ 3, 4, 2 });
+
+	std::cout << xt::linalg::dot(foo, bar) << "\n\n\n";
+	std::cout << util::matrix_mul(foo, bar) << "\n";
+}
+
+#endif

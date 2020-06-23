@@ -5,8 +5,11 @@
 #pragma once
 
 #include "../cost.h"
-#include "../misc.h"
+#include "../util.h"
 #include "../model.h"
+
+// the definition of the interface Optimiser lives in there, for reasons.
+#include "../layers/base.h"
 
 /*
 	implementation of "vanilla" mini-batch gradient descent. you usually never want
@@ -50,37 +53,24 @@ namespace znn::optimisers
 			auto prediction = model.train_forward(input);
 			auto out_layer = model.outputLayer();
 
-			std::unordered_map<Layer*, xarr> gradients;
+			assert(target.shape() == prediction.shape());
+
 			{
-				xarr delta = this->spec.costFn.derivative(target, prediction);
+				xarr error = this->spec.costFn.derivative(target, prediction);
+				out_layer->backward(error);
 
-				auto cl = out_layer;
-				while(cl && cl->prev())
-				{
-					auto [ gradient, new_delta ] = cl->backward(delta);
-					// gradients[cl] = std::move(gradient);
-					delta = std::move(new_delta);
+				// auto cl = out_layer;
+				// while(cl && cl->prev())
+				// {
+				// 	auto [ gradient, new_error ] = cl->backward(error);
+				// 	error = std::move(new_error);
 
-					deltas[cl].d_weight += util::dot(gradient, cl->prev()->getLastOutput());
-					deltas[cl].d_bias   += gradient;
+				// 	deltas[cl].d_weight += util::matrix_mul(xt::transpose(gradient), cl->prev()->getLastOutput());
+				// 	deltas[cl].d_bias   += gradient;
 
-					cl = cl->prev();
-				}
+				// 	cl = cl->prev();
+				// }
 			}
-
-			// {
-			// 	auto cl = out_layer;
-			// 	while(cl && cl->prev()) // don't do the input layer
-			// 	{
-			// 		auto w = util::dot(gradients[cl], cl->prev()->getLastOutput());
-
-			// 		auto& dels = deltas[cl];
-			// 		dels.d_weight += std::move(w);
-			// 		dels.d_bias   += std::move(gradients[cl]);
-
-			// 		cl = cl->prev();
-			// 	}
-			// }
 		}
 
 	public:
@@ -120,9 +110,8 @@ namespace znn::optimisers
 		}
 	};
 
-
 	template <typename CostFn>
-	struct VanillaGD : GDDriver<CostFn, VanillaGD<CostFn>>
+	struct VanillaGD : GDDriver<CostFn, VanillaGD<CostFn>>, Optimiser
 	{
 		using Base = GDDriver<CostFn, VanillaGD<CostFn>>;
 		using LayerDeltaMap = typename Base::LayerDeltaMap;
@@ -141,15 +130,26 @@ namespace znn::optimisers
 			// do nothing
 		}
 
-		void update_weights(LayerDeltaMap& deltas, size_t samples, Layer* cl)
+		virtual void computeDeltas(Layer* layer, xarr& dw, xarr& db) override
 		{
-			while(cl && cl->prev())
-			{
-				auto& [ dw, db ] = deltas[cl];
+			// vanilla gradient descent doesn't need to do anything special.
+			(void) layer;
+			(void) dw;
+			(void) db;
+		}
 
-				cl->updateWeights(dw, db, 1.0 / ((double) samples / this->learningRate));
-				cl = cl->prev();
-			}
+		void update_weights(LayerDeltaMap& deltas, size_t samples, Layer* last)
+		{
+			last->updateWeights(this, 1.0 / ((double) samples / this->learningRate));
+			last->resetDeltas();
+
+			// while(cl && cl->prev())
+			// {
+			// 	auto& [ dw, db ] = deltas[cl];
+
+			// 	cl->updateWeights(dw, db, );
+			// 	cl = cl->prev();
+			// }
 		}
 	};
 }

@@ -4,9 +4,10 @@
 
 #pragma once
 
-#include "misc.h"
+#include "util.h"
 
 #include "layers/input.h"
 #include "layers/dense.h"
+#include "layers/flatten.h"
 #include "layers/dropout.h"
 #include "layers/batchnorm.h"

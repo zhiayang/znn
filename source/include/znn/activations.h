@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "misc.h"
+#include "util.h"
 
 namespace znn::activations
 {

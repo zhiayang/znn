@@ -6,7 +6,7 @@
 
 #include "precompile.h"
 
-#include "misc.h"
+#include "util.h"
 #include "layers.h"
 #include "optimisers.h"
 #include "activations.h"
