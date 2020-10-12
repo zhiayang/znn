@@ -7,67 +7,23 @@
 #include "znn/znn.h"
 
 
-/*
-	TODO list
-
-
-	1. backpropagation should be done the same way as forward propagation
-
-		for forward we can just do output_layer->compute(), and that will make
-		sure that all its input layers get computed, and so forth. in declaring
-		the layers we already made a dependency graph, so might as well use it.
-
-		once models get complex enough that they're no longer a line, but a graph,
-		it's impossible to do (current = current->prev()) cos there might be more
-		than one previous layer.
-
-		it might not be that hard to do this, since the gradient accumulation
-		and weight/bias calculations are both done in the same direction, and are
-		calculated the same way independent of the optimiser.
-
-
-	2. training needs to be done across all samples in a batch, layer by layer.
-
-		currently, training is done in batches, but we do a full forward+backward
-		pass on each model per sample. instead, what we need to do is to feed the
-		entire batch of inputs to the first layer of all models, followed by running
-		the second layer of all models, etc.
-
-		not entirely sure how this can be done, since each layer has a bunch of
-		internal state. the other issue is that since we are going with the "pull"
-		approach instead of the "push" approach, it won't be that easy to do the
-		naive thing and just loop through all models and save each layer's output
-		into a temporary to feed into the next layer's input in the next loop.
-
-		this approach is required for us to implement batch normalisation, which is
-		apparently a Big Thing (tm). computing the activations of a batchnorm layer
-		require the outputs from the previous layer *across the entire batch*, which
-		definitely means that we must compute the entire batch layerwise rather than
-		samplewise.
-
-
-
-	3. add more layers
-
-		probably next is conv1d and conv2d, after we finish batchnorm and batchrenorm.
-		then some pooling layers (maxpool, minpool, avgpool) and i think that should
-		be the MVP for this library.
-*/
-
-
 #if 1
 
 int main(int argc, char** argv)
 {
 	using namespace znn;
 
+	optimisers::ENABLE_BATCHED() = (argc > 1 && std::string(argv[1]) == "batch");
+
 	znn::util::setSeed(1);
+	xt::print_options::set_line_width(90);
+	xt::print_options::set_precision(9);
 
 	auto in = layers::Input<shape<2>>();
-	auto a = layers::Dense<10>(in, activations::Sigmoid(), regularisers::L2(0.001));
-	// auto b = layers::Dropout(a, 0.05);
-	auto c = layers::Flatten(a);
-	auto d = layers::Dense<1, activations::Sigmoid>(c);
+	auto a = layers::Dense<10>(in, activations::Sigmoid());
+	auto b = layers::BatchNorm(a);
+	// auto c = layers::Flatten(a);
+	auto d = layers::Dense<1, activations::Sigmoid>(b);
 	auto model = Model(in, d);
 
 	std::vector<xarr> inputs;
@@ -78,7 +34,7 @@ int main(int argc, char** argv)
 
 
 
-	for(size_t i = 0; i < 300; i++)
+	for(size_t i = 0; i < 200; i++)
 	{
 		inputs.push_back({ 0, 0 }); outputs.push_back({ 0 });
 		inputs.push_back({ 0, 1 }); outputs.push_back({ 1 });
@@ -86,14 +42,16 @@ int main(int argc, char** argv)
 		inputs.push_back({ 1, 1 }); outputs.push_back({ 0 });
 	}
 
-	auto opt = optimisers::Adam<cost::MeanSquare>(8, 0.1, 0.9);
-	for(size_t i = 0; i < 100; i++)
+	auto opt = optimisers::Adam<cost::MeanSquare>(4, 0.01);
+	for(size_t i = 0; i < 50; i++)
 	{
-		fprintf(stderr, "\r            \repoch %zu", i);
+		fprintf(stderr, "\r            \repoch %zu", i + 1);
+		// fprintf(stderr, "\n");
+
 		znn::train(model, inputs, outputs, opt);
 	}
 
-	fprintf(stderr, "\n");
+	fprintf(stderr, "\n\n\n");
 
 	std::cout << "0 ^ 0  =  " << xt::flatten(model.predict({ 0, 0 })) << "\n";
 	std::cout << "0 ^ 1  =  " << xt::flatten(model.predict({ 0, 1 })) << "\n";
@@ -102,39 +60,7 @@ int main(int argc, char** argv)
 
 	std::cout << "\n";
 
-
-/*
-6batch size 64:
-0 ^ 0  =  { 0.470141}
-0 ^ 1  =  { 0.519161}
-1 ^ 0  =  { 0.513386}
-1 ^ 1  =  { 0.508132}
-
-3batch size 32:
-0 ^ 0  =  { 0.468871}
-0 ^ 1  =  { 0.508279}
-1 ^ 0  =  { 0.498757}
-1 ^ 1  =  { 0.513801}
-
-1batch size 16:
-0 ^ 0  =  { 0.508404}
-0 ^ 1  =  { 0.565234}
-1 ^ 0  =  { 0.529362}
-1 ^ 1  =  { 0.552676}
-
-batch size 8:
-0 ^ 0  =  { 0.472416}
-0 ^ 1  =  { 0.597913}
-1 ^ 0  =  { 0.554915}
-1 ^ 1  =  { 0.610829}
-
-batch size 1:
-0 ^ 0  =  { 0.00021 }
-0 ^ 1  =  { 0.686758}
-1 ^ 0  =  { 0.534608}
-1 ^ 1  =  { 0.001626}
-*/
-
+	// std::cout << d.weights << "\n";
 
 	printf("hello, world!\n");
 }
@@ -143,12 +69,13 @@ batch size 1:
 int main()
 {
 	using namespace znn;
+	auto a = xt::arange(15).reshape({ 3, 5 });
+	auto b = xt::arange(84).reshape({ 4, 3, 7 });
 
-	xarr foo = xt::arange(36).reshape({ 3, 3, 4 });
-	xarr bar = xt::arange(24).reshape({ 3, 4, 2 });
+	// std::cout << xt::adapt(xt::linalg::tensordot(xt::transpose(a), b,
+	// 	{ a.dimension() - 1 }, { 1 }).shape()) << "\n";
 
-	std::cout << xt::linalg::dot(foo, bar) << "\n\n\n";
-	std::cout << util::matrix_mul(foo, bar) << "\n";
+	std::cout << util::matrix_mul(xt::transpose(a), b) << "\n";
 }
 
 #endif

@@ -34,22 +34,30 @@ namespace znn::layers
 
 				if(training)
 				{
+					auto perform = [&](auto& m) -> xarr {
+						// we need to scale it by 1/(1-P) to keep the expected sum of the output values
+						// the same regardless of the dropout probability
+						m /= (1.0 - this->probability);
+						return m * input;
+					};
+
 					// first generate the mask. we lose nodes with P probability, so we want to generate
 					// a binomial distribution with 1-P chance of success.
-					// also note: the mask should be strictly the size of the input, unbatched.
-					this->mask = xt::random::binomial(unbatched_input_shape(input, batched),
-						1, 1.0 - this->probability);
-
-					// then we need to scale it by 1/(1-P) to keep the expected sum of the output values
-					// the same regardless of the dropout probability
-					this->mask /= (1.0 - this->probability);
-
-					// then mask the output.
-					this->last_output = xt::eval(input * this->mask);
+					auto&& rands = xt::random::binomial<double>(input.shape(), 1, 1.0 - this->probability);
+					if(batched)
+					{
+						this->batchedMask = std::move(rands);
+						this->last_output = perform(this->batchedMask);
+					}
+					else
+					{
+						this->mask = std::move(rands);
+						this->last_output = perform(this->mask);
+					}
 				}
 				else
 				{
-					this->last_output = input;
+					this->last_output = std::move(input);
 				}
 
 				return this->last_output;
@@ -60,14 +68,14 @@ namespace znn::layers
 				assert(ensure_correct_dimensions<OutputShape>(error, batched));
 
 				// since we have no weights, there's no need to update dw or db.
-				this->prev()->backward(error * this->mask, batched);
+				if(batched) this->prev()->backward(this->batchedMask * error, batched);
+				else        this->prev()->backward(this->mask * error, batched);
 			}
 
 			virtual void updateWeights(optimisers::Optimiser* opt, double scale) override
 			{
-				// there's nothing to do
-				(void) opt;
-				(void) scale;
+				// just passthrough
+				this->prev()->updateWeights(opt, scale);
 			}
 
 		private:
@@ -76,6 +84,7 @@ namespace znn::layers
 			// xtensor_fixed demands an xshape shape, which demands variadic template args; we can't
 			// convert our znn::shape to that, so the best we can do is fix the number of dimensions.
 			xt::xtensor<double, InputShape::dims> mask;
+			xt::xtensor<double, 1 + InputShape::dims> batchedMask;
 		};
 	}
 

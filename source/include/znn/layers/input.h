@@ -50,7 +50,6 @@ namespace znn::layers
 			}
 
 		private:
-			xarr input;
 		};
 	}
 

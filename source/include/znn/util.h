@@ -44,6 +44,23 @@ namespace znn
 			xt::random::seed(value);
 		}
 
+		template <typename At, typename Bt, typename R = std::common_type_t<typename At::value_type, typename Bt::value_type>>
+		std::vector<size_t> result_dims(const xt::xexpression<At>& aexp, const xt::xexpression<Bt>& bexp)
+		{
+			auto&& a = xt::view_eval<At::static_layout>(aexp.derived_cast());
+			auto&& b = xt::view_eval<Bt::static_layout>(bexp.derived_cast());
+
+			std::vector<size_t> out_shape;
+			for(size_t i = 0; i < a.dimension() - 1; i++)
+				out_shape.push_back(a.shape()[i]);
+
+			for(size_t i = 1; i < b.dimension(); i++)
+				out_shape.push_back(b.shape()[i]);
+
+			return out_shape;
+		}
+
+
 		// similar to python matmul -- treats dimension > 2 as a stack of matrices.
 		// for two vectors, takes the outer product and returns a matrix.
 		// template <class _Tp = double, typename XC1, typename XC2>
@@ -94,6 +111,8 @@ namespace znn
 				}
 				else if(a.dimension() > b.dimension())
 				{
+					// for now, let's not support broadcasting more than one dimension at once.
+					assert(a.dimension() - 1 == b.dimension());
 					size_t layers = a.shape()[0];
 
 					Arr tmp;
@@ -119,24 +138,29 @@ namespace znn
 				else
 				{
 					assert(a.dimension() < b.dimension());
-					size_t layers = b.shape().back();
+
+					// for now, let's not support broadcasting more than one dimension at once.
+					assert(a.dimension() + 1 == b.dimension());
+
+					size_t layers = b.shape()[0];
 
 					Arr tmp;
 					{
-						Arr b0 = xt::strided_view(b, { xt::ellipsis(), 0 });
+						Arr b0 = xt::strided_view(b, { xt::ellipsis(), 0, xt::all(), xt::all() });
 						tmp = matrix_mul(a, std::move(b0));
 					}
 
 					auto out_shape = tmp.shape();
-					out_shape.insert(out_shape.end(), layers);
+					out_shape.insert(out_shape.begin(), layers);
 
 					auto result = Arr::from_shape(out_shape);
-					xt::strided_view(result, { xt::ellipsis(), 0 }) = std::move(tmp);
+					xt::strided_view(result, { xt::ellipsis(), 0, xt::all(), xt::all() }) = std::move(tmp);
 
 					for(size_t i = 1; i < layers; i++)
 					{
-						Arr bi = xt::strided_view(b, { xt::ellipsis(), i });
-						xt::strided_view(result, { xt::ellipsis(), i }) = matrix_mul(a, std::move(bi));
+						Arr bi = xt::strided_view(b, { xt::ellipsis(), i, xt::all(), xt::all() });
+						xt::strided_view(result, { xt::ellipsis(), i, xt::all(), xt::all() })
+							= matrix_mul(a, std::move(bi));
 					}
 
 					return result;

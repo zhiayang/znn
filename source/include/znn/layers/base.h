@@ -68,12 +68,6 @@ namespace znn
 			return shape_t(shape.begin() + (batched ? 1 : 0), shape.end());
 		}
 
-		void update_dw_db(const xarr& gradient, const xarr& inputs)
-		{
-			this->d_weight += util::matrix_mul(xt::transpose(gradient), inputs);
-			this->d_bias += gradient;
-		}
-
 	private:
 		Layer* input_layer = 0;
 	};

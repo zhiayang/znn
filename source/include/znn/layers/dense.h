@@ -36,7 +36,9 @@ namespace znn::layers
 				auto input = this->prev()->compute(training, batched);
 				assert(ensure_correct_dimensions<InputShape>(input, batched));
 
-				xarr output = util::matrix_mul(input, this->transposedWeights) + this->biases;
+				// util::matrix_mul(input, this->transposedWeights) + this->biases;
+				xarr output = xt::linalg::tensordot(input, this->transposedWeights, 1) + this->biases;
+
 				assert(ensure_correct_dimensions<OutputShape>(output, batched));
 
 				this->last_output = xt::eval(this->activator.forward(output));
@@ -48,19 +50,31 @@ namespace znn::layers
 				assert(ensure_correct_dimensions<OutputShape>(error, batched));
 
 				auto gradient = error * this->activator.derivative(this->last_output);
-				auto newerror = util::matrix_mul(gradient, this->weights);
+				auto newerror = backward_weight_mul(this->transposedWeights, gradient, batched);
 
+				auto&& input = this->prev()->getLastOutput();
 				if(batched)
 				{
-					// need to squash along the batch dimension
-					this->update_dw_db(
-						xt::sum(gradient, 0),
-						xt::sum(this->prev()->getLastOutput(), 0)
-					);
+					assert(gradient.shape()[0] == input.shape()[0]);
+
+					size_t batch_size = gradient.shape()[0];
+					xarr dw = xt::zeros<double>(weights.shape());
+
+					for(size_t i = 0; i < batch_size; i++)
+					{
+						auto&& gd = xt::view(gradient, i);
+						auto&& in = xt::view(input, i);
+
+						dw += util::matrix_mul(gd, xt::transpose(in));
+					}
+
+					this->d_weight += dw;
+					this->d_bias += xt::sum(gradient, 0);
 				}
 				else
 				{
-					this->update_dw_db(gradient, this->prev()->getLastOutput());
+					this->d_weight += util::matrix_mul(gradient, xt::transpose(input));
+					this->d_bias += gradient;
 				}
 
 				this->prev()->backward(newerror, batched);
@@ -81,7 +95,6 @@ namespace znn::layers
 				this->biases -= scale * xt::sum(this->d_bias, 0);
 
 				this->transposedWeights = xt::transpose(this->weights);
-
 				this->prev()->updateWeights(opt, scale);
 			}
 
@@ -91,6 +104,41 @@ namespace znn::layers
 			xt::xtensor_fixed<double, xt::xshape<N>> biases;
 			xt::xtensor_fixed<double, xt::xshape<N, InputShape::template last<>>> weights;
 			xt::xtensor_fixed<double, xt::xshape<InputShape::template last<>, N>> transposedWeights;
+
+			template <typename At, typename Bt, typename R = std::common_type_t<typename At::value_type, typename Bt::value_type>>
+			xt::xarray<R> backward_weight_mul(const xt::xexpression<At>& aexp, const xt::xexpression<Bt>& bexp, bool batched)
+			{
+				auto&& weight = xt::view_eval<At::static_layout>(aexp.derived_cast());
+				auto&& gradient = xt::view_eval<Bt::static_layout>(bexp.derived_cast());
+
+				if(batched)
+				{
+					assert(weight.shape().back() == gradient.shape()[1]);
+					auto batch_size = gradient.shape()[0];
+
+					std::vector<size_t> out_shape;
+					out_shape.push_back(batch_size);
+					for(size_t i = 0; i < weight.dimension() - 1; i++)
+						out_shape.push_back(weight.shape()[i]);
+
+					for(size_t i = 2; i < gradient.dimension(); i++)
+						out_shape.push_back(gradient.shape()[i]);
+
+					auto result = xarr::from_shape(out_shape);
+					auto& b = gradient;
+					auto& a = weight;
+
+					for(size_t i = 0; i < batch_size; i++)
+						xt::view(result, i) = util::matrix_mul(a, xt::view(b, i));
+
+					return result;
+				}
+				else
+				{
+					assert(weight.shape().back() == gradient.shape().front());
+					return util::matrix_mul(weight, gradient);
+				}
+			}
 		};
 	}
 

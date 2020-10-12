@@ -5,7 +5,7 @@
 
 WARNINGS        = -Wno-padded -Wno-cast-align -Wno-unreachable-code -Wno-packed -Wno-missing-noreturn -Wno-float-equal -Wno-unused-macros -Werror=return-type -Wextra -Wno-unused-parameter -Wno-trigraphs -Wno-unused-local-typedef -Wno-reorder
 
-COMMON_CFLAGS   = -Wall -O3 -g -march=native
+COMMON_CFLAGS   = -Wall -O0 -g -march=native
 
 CFLAGS          = $(COMMON_CFLAGS) -std=c99 -fPIC -O3
 CXXFLAGS        = $(COMMON_CFLAGS) -Wno-old-style-cast -std=c++17

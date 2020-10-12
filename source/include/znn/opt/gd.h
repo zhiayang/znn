@@ -24,6 +24,12 @@
 
 namespace znn::optimisers
 {
+	inline bool& ENABLE_BATCHED()
+	{
+		static bool foo = false;
+		return foo;
+	}
+
 	template <typename CostFn, typename Specialisation>
 	struct GDDriver
 	{
@@ -90,29 +96,49 @@ namespace znn::optimisers
 
 			while(todo > 0)
 			{
-				// update the batch dimension to be correct
-				x_shape[0] = todo;
-				y_shape[0] = todo;
-
-				xarr x_batch = xarr::from_shape(x_shape);
-				xarr y_batch = xarr::from_shape(y_shape);
-
-				for(size_t i = 0; i < todo; i++)
+				// in batched mode, the inputs and outputs gain an extra dimension; the first axis is now the batch
+				// size. putting it first obviously allows us to take advantage of broadcasting etc, and the rest of
+				// the code doesn't really need to care.
+				if(ENABLE_BATCHED())
 				{
-					xt::view(x_batch, i) = inputs[indices[index]];
-					xt::view(y_batch, i) = targets[indices[index]];
-					index++;
+					// update the batch dimension to be correct
+					x_shape[0] = todo;
+					y_shape[0] = todo;
+
+					xarr x_batch = xarr::from_shape(x_shape);
+					xarr y_batch = xarr::from_shape(y_shape);
+
+					for(size_t i = 0; i < todo; i++)
+					{
+						xt::view(x_batch, i) = inputs[indices[index]];
+						xt::view(y_batch, i) = targets[indices[index]];
+						index++;
+					}
+
+					{
+						model.feed_training(x_batch);
+						auto out_layer = model.outputLayer();
+						auto prediction = out_layer->compute(/* training: */ true, /* batched: */ true);
+
+						assert(y_batch.shape() == prediction.shape());
+
+						xarr error = this->spec.costFn.derivative(y_batch, prediction);
+						out_layer->backward(error, /* batched: */ true);
+					}
 				}
-
+				else
 				{
-					model.feed_training(x_batch);
-					auto out_layer = model.outputLayer();
-					auto prediction = out_layer->compute(/* training: */ true, /* batched: */ true);
+					for(size_t i = 0; i < todo; i++)
+					{
+						model.feed_training(inputs[indices[index]]);
+						auto out_layer = model.outputLayer();
+						auto prediction = out_layer->compute(/* training: */ true, /* batched: */ false);
 
-					assert(y_batch.shape() == prediction.shape());
+						xarr error = this->spec.costFn.derivative(targets[indices[index]], prediction);
+						out_layer->backward(error, /* batched: */ false);
 
-					xarr error = this->spec.costFn.derivative(y_batch, prediction);
-					out_layer->backward(error, /* batched: */ true);
+						index++;
+					}
 				}
 
 				this->spec.update_weights(todo, model.outputLayer());
@@ -127,8 +153,6 @@ namespace znn::optimisers
 	struct VanillaGD : GDDriver<CostFn, VanillaGD<CostFn>>, Optimiser
 	{
 		using Base = GDDriver<CostFn, VanillaGD<CostFn>>;
-		using LayerDeltaMap = typename Base::LayerDeltaMap;
-
 		friend Base;
 
 		VanillaGD(size_t batchSize, double learningRate, CostFn costfn = CostFn())

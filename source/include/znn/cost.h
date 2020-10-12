@@ -19,7 +19,7 @@ namespace znn::cost
 		xarr derivative(const xarr& target, const xarr& prediction)
 		{
 			assert(target.shape() == prediction.shape());
-			return (prediction - target) / target.size();
+			return (prediction - target);
 		}
 	};
 }

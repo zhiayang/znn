@@ -30,6 +30,8 @@ namespace znn::layers
 				auto input = this->prev()->compute(training, batched);
 				assert(ensure_correct_dimensions<InputShape>(input, batched));
 
+				// we're only supposed to flatten each input set, so we must exclude the first
+				// axis (batch size) from flattening.
 				this->last_output = (batched
 					? xarr(xt::reshape_view(input, { input.shape()[0], OutputShape::sizes[0] }))
 					: xarr(xt::flatten(input))
@@ -64,9 +66,8 @@ namespace znn::layers
 
 			virtual void updateWeights(optimisers::Optimiser* opt, double scale) override
 			{
-				// there's nothing to do
-				(void) opt;
-				(void) scale;
+				// just passthrough
+				this->prev()->updateWeights(opt, scale);
 			}
 
 		private:
